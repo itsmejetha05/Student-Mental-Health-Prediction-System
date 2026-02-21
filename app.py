@@ -1,73 +1,77 @@
 import streamlit as st
-import numpy as np
+import pandas as pd
 import pickle
 
-# --- 1. LOAD THE SYSTEM ---
-try:
-    with open("mental_health_model.pkl", 'rb') as f:
-        data = pickle.load(f)
-        model = data['model']
-        scaler = data['scaler']
-except FileNotFoundError:
-    st.error("⚠️ Error: 'mental_health_model.pkl' not found. Run 'train_model.py' first!")
-    st.stop()
+# 1. Load the trained Pipeline
+with open('mental_health_model.pkl', 'rb') as f:
+    model_pipeline = pickle.load(f)
 
-# --- 2. APP UI DESIGN ---
-st.set_page_config(page_title="Student Mental Health AI", layout="centered")
+st.set_page_config(page_title="Mental Health Predictor", layout="centered")
+st.title("🧠 Student Mental Health Prediction System")
 
-st.title("🧠 Student Mental Health Predictor")
-st.markdown("### AI-Powered Risk Assessment System")
-st.info("This tool uses 8 distinct factors to predict the likelihood of student depression.")
-
-# --- 3. INPUT FORM ---
-with st.form("risk_form"):
-    st.write("#### 📝 Enter Student Details:")
-    
+# 2. Input Form
+with st.form("user_inputs"):
+    st.subheader("Personal & Academic Details")
     col1, col2 = st.columns(2)
     
     with col1:
-        st.write("**Academic & Personal Info**")
-        age = st.slider("Age", 17, 35, 21)
-        year = st.slider("Year of Study", 1, 4, 2)  # Added Year!
+        age = st.number_input("Age", 17, 40, 20)
+        year = st.selectbox("Year of Study", [1, 2, 3, 4])
+        cgpa = st.slider("Current CGPA", 0.0, 4.0, 3.2)
         gender = st.selectbox("Gender", ["Female", "Male"])
-        cgpa = st.number_input("CGPA (0.00 - 4.00)", min_value=0.0, max_value=4.0, value=3.5, step=0.01)
-        marital = st.radio("Are you Married?", ["No", "Yes"]) 
-        
+    
     with col2:
-        st.write("**Mental Health History**")
-        anxiety = st.radio("Do you experience Anxiety?", ["No", "Yes"])
-        panic = st.radio("Do you have Panic Attacks?", ["No", "Yes"])
-        specialist = st.radio("Have you sought specialist treatment before?", ["No", "Yes"]) # Added Specialist!
+        anxiety = st.radio("Experiencing Anxiety?", ["No", "Yes"])
+        panic = st.radio("Experiencing Panic Attacks?", ["No", "Yes"])
+        married = st.radio("Marital Status", ["Unmarried", "Married"])
+        specialist = st.radio("Previously sought Specialist Treatment?", ["No", "Yes"])
+    
+    submit = st.form_submit_button("Generate Prediction & Feedback")
 
-    submit = st.form_submit_button("🔍 Analyze Risk")
-
-# --- 4. PREDICTION LOGIC ---
+# 3. Prediction & Feedback Logic
 if submit:
-    # 1. Convert Text Inputs to Numbers
-    gen_val = 0 if gender == "Female" else 1
-    anx_val = 1 if anxiety == "Yes" else 0
-    pan_val = 1 if panic == "Yes" else 0
-    mar_val = 1 if marital == "Yes" else 0
-    spec_val = 1 if specialist == "Yes" else 0
-    
-    # 2. Prepare Data Row (MUST MATCH EXACT ORDER IN train_model.py)
-    # Order: [Age, Year, CGPA, Gender, Anxiety, Panic, Marital, Specialist]
-    raw_data = np.array([[age, year, cgpa, gen_val, anx_val, pan_val, mar_val, spec_val]])
-    
-    # 3. Scale the Data
-    scaled_data = scaler.transform(raw_data)
-    
-    # 4. Predict
-    prediction = model.predict(scaled_data)[0]
-    probability = model.predict_proba(scaled_data)[0][1]
+    # Prepare data for model
+    input_data = pd.DataFrame([[
+        age, year, cgpa,
+        0 if gender == "Female" else 1,
+        1 if anxiety == "Yes" else 0,
+        1 if panic == "Yes" else 0,
+        1 if married == "Married" else 0,
+        1 if specialist == "Yes" else 0
+    ]], columns=['Age', 'Year_Cleaned', 'CGPA_Cleaned', 'Choose your gender', 
+                'Do you have Anxiety?', 'Do you have Panic attack?', 
+                'Marital status', 'Did you seek any specialist for a treatment?'])
 
-    # 5. Display Result
+    # Get Prediction and Probability
+    prediction = model_pipeline.predict(input_data)[0]
+    risk_score = model_pipeline.predict_proba(input_data)[0][1]
+
     st.divider()
+
+    # --- THE FEEDBACK SYSTEM ---
     if prediction == 1:
-        st.error(f"⚠️ **High Risk Detected**")
-        st.write(f"Confidence: **{probability*100:.1f}%**")
-        st.write("**Suggestion:** Please consider reaching out to university counseling services.")
+        st.error(f"### Result: HIGH RISK DETECTED ({risk_score*100:.1f}%)")
+        
+        st.subheader("🚨 System Feedback & Actions")
+        st.write("Based on the data provided, the system suggests you may be experiencing significant academic or emotional stress.")
+        
+        st.markdown("""
+        **Recommended Steps:**
+        * **Seek Professional Support:** Please visit the college counseling department for a confidential chat.
+        * **Talk to Someone:** Reach out to a trusted mentor, teacher, or family member.
+        * **Prioritize Wellness:** Ensure you are getting at least 7-8 hours of sleep and taking breaks from studies.
+        """)
     else:
-        st.success(f"✅ **Low Risk Detected**")
-        st.write(f"Confidence: **{probability*100:.1f}%**")
-        st.write("**Suggestion:** Keep up the healthy study-life balance!")
+        st.success(f"### Result: LOW RISK DETECTED ({(1-risk_score)*100:.1f}% Confidence)")
+        
+        st.subheader("💡 Wellness Maintenance Tips")
+        st.write("Your current indicators suggest a stable mental state. Here is how to maintain it:")
+        
+        st.markdown("""
+        **Keep Doing:**
+        * **Balanced Schedule:** Continue managing your time between studies and relaxation.
+        * **Stay Active:** Engaging in social clubs or sports can help prevent future stress.
+        * **Self-Check:** Periodically check in with your feelings, especially during exam weeks.
+        """)
+
+st.caption("Disclaimer: This tool provides an AI-based risk screening and is not a clinical diagnosis.")
