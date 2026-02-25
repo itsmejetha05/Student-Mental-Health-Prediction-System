@@ -1,81 +1,70 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.preprocessing import LabelEncoder
+import numpy as np
+from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import confusion_matrix, roc_curve, auc, classification_report
+from sklearn.model_selection import train_test_split
+from imblearn.over_sampling import SMOTE
 
-# --- 1. LOAD & CLEAN DATA (Matching your 8-feature model) ---
+# --- 1. DATA PREPARATION ---
 df = pd.read_csv('Student Mental health.csv')
 
-def clean_cgpa(val):
-    val = str(val).strip()
-    if '-' in val:
-        try:
-            low, high = val.split('-')
-            return (float(low) + float(high)) / 2
-        except:
-            return 0.0
-    try:
-        return float(val)
-    except:
-        return 0.0
+def clean_data(data):
+    data['CGPA_Cleaned'] = data['What is your CGPA?'].apply(lambda x: float(str(x).split('-')[0]) if '-' in str(x) else float(x))
+    data['Year_Cleaned'] = data['Your current year of Study'].str.extract('(\d+)').astype(float).fillna(1)
+    le = LabelEncoder()
+    cols = ['Choose your gender', 'Marital status', 'Do you have Anxiety?', 'Do you have Panic attack?', 'Did you seek any specialist for a treatment?']
+    for col in cols:
+        data[col] = le.fit_transform(data[col].astype(str))
+    data['Depression'] = le.fit_transform(data['Do you have Depression?'].astype(str))
+    return data
 
-def clean_year(val):
-    val = str(val).lower().replace('year', '').strip()
-    try:
-        return int(val)
-    except:
-        return 1 
+df = clean_data(df)
+feature_cols = ['Age', 'Year_Cleaned', 'CGPA_Cleaned', 'Choose your gender', 'Do you have Anxiety?', 'Do you have Panic attack?', 'Marital status', 'Did you seek any specialist for a treatment?']
+X = df[feature_cols].fillna(df[feature_cols].mean())
+y = df['Depression']
 
-df['CGPA_Cleaned'] = df['What is your CGPA?'].apply(clean_cgpa)
-df['Year_Cleaned'] = df['Your current year of Study'].apply(clean_year)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, stratify=y, random_state=42)
 
-# Encode text to numbers for the heatmap
-le = LabelEncoder()
-cols_to_encode = [
-    'Choose your gender', 'Marital status', 'Do you have Anxiety?', 
-    'Do you have Panic attack?', 'Did you seek any specialist for a treatment?',
-    'Do you have Depression?'
-]
+# --- 2. GENERATE FIGURES FOR REPORT ---
 
-df_encoded = df.copy()
-for col in cols_to_encode:
-    df_encoded[col] = le.fit_transform(df_encoded[col].astype(str))
+# Figure 9 & 10: Class Distribution (Before & After SMOTE)
+plt.figure(figsize=(6,5))
+sns.countplot(x=y_train, palette='viridis')
+plt.title('Figure 9: Class Distribution Before SMOTE')
+plt.savefig('figure_9_before.png')
 
-# --- 2. GENERATE THE IMAGES ---
+sm = SMOTE(random_state=42)
+X_res, y_res = sm.fit_resample(X_train, y_train)
 
-# Graph 1: Pie Chart (Proving the need for SMOTE)
-plt.figure(figsize=(6,6))
-df['Do you have Depression?'].value_counts().plot(
-    kind='pie', autopct='%1.1f%%', colors=['#66b3ff','#ff9999'], startangle=90
-)
-plt.title('Depression Distribution (Before SMOTE)')
-plt.ylabel('')
-plt.savefig('graph_1_imbalance.png')
-print("✅ Saved 'graph_1_imbalance.png'")
+plt.figure(figsize=(6,5))
+sns.countplot(x=y_res, palette='magma')
+plt.title('Figure 10: Class Distribution After SMOTE')
+plt.savefig('figure_10_after.png')
 
-# Graph 2: CGPA vs Depression (Boxplot)
-plt.figure(figsize=(8,5))
-sns.boxplot(x='Do you have Depression?', y='CGPA_Cleaned', data=df, palette='Set2')
-plt.title('Impact of CGPA on Depression Risk')
-plt.savefig('graph_2_cgpa.png')
-print("✅ Saved 'graph_2_cgpa.png'")
+# Figure 14: Baseline Confusion Matrix (Matches Jashmina style)
+lr_base = LogisticRegression(max_iter=1000)
+lr_base.fit(X_train, y_train)
+y_pred_base = lr_base.predict(X_test)
 
-# Graph 3: Specialist vs Depression (Bar Chart for the new feature)
-plt.figure(figsize=(8,5))
-sns.countplot(x='Did you seek any specialist for a treatment?', hue='Do you have Depression?', data=df, palette='Pastel1')
-plt.title('Specialist Treatment vs. Depression')
-plt.savefig('graph_3_specialist.png')
-print("✅ Saved 'graph_3_specialist.png'")
+def plot_cm(y_true, y_pred, title, filename):
+    cm = confusion_matrix(y_true, y_pred)
+    group_names = ['TN','FP','FN','TP']
+    labels = [f"{v1}\n{v2}" for v1, v2 in zip(cm.flatten(), group_names)]
+    labels = np.asarray(labels).reshape(2,2)
+    plt.figure(figsize=(7,6))
+    sns.heatmap(cm, annot=labels, fmt='', cmap='Blues', xticklabels=['No','Yes'], yticklabels=['No','Yes'])
+    plt.title(title)
+    plt.savefig(filename)
 
-# Graph 4: The Massive 8-Feature Correlation Heatmap
-plt.figure(figsize=(10,8))
-feature_cols = [
-    'Age', 'Year_Cleaned', 'CGPA_Cleaned', 'Choose your gender', 
-    'Do you have Anxiety?', 'Do you have Panic attack?', 'Marital status', 
-    'Did you seek any specialist for a treatment?', 'Do you have Depression?'
-]
-sns.heatmap(df_encoded[feature_cols].corr(), annot=True, cmap='coolwarm', fmt=".2f", linewidths=0.5)
-plt.title('8-Feature Correlation Matrix')
-plt.tight_layout()
-plt.savefig('graph_4_heatmap.png')
-print("✅ Saved 'graph_4_heatmap.png'")
+plot_cm(y_test, y_pred_base, 'Figure 14: Logistic Regression Baseline', 'figure_14_baseline.png')
+
+# Figure 15: SMOTE Confusion Matrix
+lr_smote = LogisticRegression(max_iter=1000)
+lr_smote.fit(X_res, y_res)
+y_pred_smote = lr_smote.predict(X_test)
+plot_cm(y_test, y_pred_smote, 'Figure 15: Logistic Regression with SMOTE', 'figure_15_smote.png')
+
+print("✅ All figures (9, 10, 14, 15) saved for Chapter 4.")
