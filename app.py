@@ -23,24 +23,24 @@ with st.form("user_inputs"):
     with col2:
         anxiety = st.radio("Experiencing Anxiety?", ["No", "Yes"])
         panic = st.radio("Experiencing Panic Attacks?", ["No", "Yes"])
-        married = st.radio("Marital Status", ["Unmarried", "Married"])
+        # Marital Status removed because it is not in the new mentalhealth_dataset_aligned.csv
         specialist = st.radio("Previously sought Specialist Treatment?", ["No", "Yes"])
     
     submit = st.form_submit_button("Generate Prediction & Feedback")
 
 # 3. Prediction & Feedback Logic
 if submit:
-    # Prepare data for model
+    # Prepare data for model - Column names MUST match the Training Set features
     input_data = pd.DataFrame([[
-        age, year, cgpa,
+        age, 
+        float(year), 
+        cgpa,
         0 if gender == "Female" else 1,
         1 if anxiety == "Yes" else 0,
         1 if panic == "Yes" else 0,
-        1 if married == "Married" else 0,
         1 if specialist == "Yes" else 0
-    ]], columns=['Age', 'Year_Cleaned', 'CGPA_Cleaned', 'Choose your gender', 
-                'Do you have Anxiety?', 'Do you have Panic attack?', 
-                'Marital status', 'Did you seek any specialist for a treatment?'])
+    ]], columns=['Age', 'Year_Cleaned', 'CGPA_Cleaned', 'Gender_Encoded', 
+                'Anxiety', 'PanicAttack', 'SpecialistTreatment'])
 
     # Get Prediction and Probability
     prediction = model_pipeline.predict(input_data)[0]
