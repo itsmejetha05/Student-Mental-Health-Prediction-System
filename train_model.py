@@ -199,3 +199,44 @@ plt.savefig('feature_importance.png')
 # Final Test Set Evaluation
 print("\n--- Final Evaluation on Test Set (SMOTE Model) ---")
 print(classification_report(y_test, grid_lr.predict(X_test)))
+# ==========================================
+# 7. FINAL TEST SET IMAGES (NEW)
+# ==========================================
+
+# 1. Generate Test Set Predictions
+y_test_pred = grid_lr.predict(X_test)
+y_test_probs = grid_lr.predict_proba(X_test)[:, 1]
+
+# 2. Generate Test Confusion Matrix Image
+plt.figure(figsize=(7, 6))
+cm_test = confusion_matrix(y_test, y_test_pred)
+sns.heatmap(cm_test, annot=True, fmt='d', cmap='Greens', 
+            xticklabels=['No Risk', 'Risk'], 
+            yticklabels=['No Risk', 'Risk'])
+plt.title('Final Test Set: Confusion Matrix')
+plt.xlabel('Predicted Label')
+plt.ylabel('True Label')
+plt.tight_layout()
+plt.savefig('test_confusion_matrix.png') # <--- Image 1
+plt.show()
+
+
+
+# 3. Generate Test ROC Curve Image
+fpr_test, tpr_test, _ = roc_curve(y_test, y_test_probs)
+roc_auc_test = auc(fpr_test, tpr_test)
+
+plt.figure(figsize=(8, 6))
+plt.plot(fpr_test, tpr_test, color='darkorange', lw=2, 
+         label=f'Test ROC curve (AUC = {roc_auc_test:.2f})')
+plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
+plt.xlim([0.0, 1.0])
+plt.ylim([0.0, 1.05])
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('Final Test Set: ROC Curve')
+plt.legend(loc="lower right")
+plt.grid(alpha=0.3)
+plt.tight_layout()
+plt.savefig('test_roc_curve.png') # <--- Image 2
+plt.show()
